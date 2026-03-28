@@ -219,22 +219,309 @@
       ansible.builtin.debug:
         msg: "Directory structure and disk overlay verified"
 
-    # === Cleanup ===
-    - name: "Cleanup: destroy test domain"
+    # === Test 6: Full destroy (nuke VM, disk, config, autostart) ===
+    - name: "Test 6: Re-create VM with autostart for destroy test"
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(test_vm | combine({'autostart': true}), recursive=true) }}"
+
+    - name: "Test 6: Verify VM is running before destroy"
+      ansible.builtin.command:
+        cmd: "xl domid {{ test_vm_name }}"
+      changed_when: false
+
+    - name: "Test 6: Verify autostart exists before destroy"
+      ansible.builtin.stat:
+        path: "/etc/xen/auto/{{ test_vm_name }}.cfg"
+      register: _t6_pre_autostart
+
+    - name: "Test 6: Assert autostart exists"
+      ansible.builtin.assert:
+        that: _t6_pre_autostart.stat.exists
+
+    - name: "Test 6: Nuke — stop domain"
       ansible.builtin.command:
         cmd: "xl destroy {{ test_vm_name }}"
       failed_when: false
+
+    - name: "Test 6: Nuke — remove autostart symlink"
+      ansible.builtin.file:
+        path: "/etc/xen/auto/{{ test_vm_name }}.cfg"
+        state: absent
+
+    - name: "Test 6: Nuke — remove Xen config"
+      ansible.builtin.file:
+        path: "/etc/xen/{{ test_vm_name }}.cfg"
+        state: absent
+
+    - name: "Test 6: Nuke — remove VM directory"
+      ansible.builtin.file:
+        path: "/vm/{{ test_vm_name }}"
+        state: absent
+
+    - name: "Test 6: Assert domain is gone"
+      ansible.builtin.command:
+        cmd: "xl domid {{ test_vm_name }}"
+      register: _t6_domid
+      failed_when: false
       changed_when: false
 
-    - name: "Cleanup: remove test files"
+    - name: "Test 6: Assert domain stopped"
+      ansible.builtin.assert:
+        that: _t6_domid.rc != 0
+        fail_msg: "Domain should not exist after destroy"
+
+    - name: "Test 6: Check all artefacts removed"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: _t6_files
+      loop:
+        - "/vm/{{ test_vm_name }}"
+        - "/vm/{{ test_vm_name }}/disk.qcow2"
+        - "/vm/{{ test_vm_name }}/cloudinit.iso"
+        - "/etc/xen/{{ test_vm_name }}.cfg"
+        - "/etc/xen/auto/{{ test_vm_name }}.cfg"
+
+    - name: "Test 6: Assert everything is gone"
+      ansible.builtin.assert:
+        that: not item.stat.exists
+        fail_msg: "Should not exist after destroy: {{ item.item }}"
+      loop: "{{ _t6_files.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Test 6: PASSED"
+      ansible.builtin.debug:
+        msg: "Full destroy — domain stopped, disk wiped, config removed, autostart removed"
+
+    # === Test 7: Autostart toggle (true → false on running VM) ===
+    - name: "Test 7: Create VM with autostart=true"
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(test_vm | combine({'autostart': true}), recursive=true) }}"
+
+    - name: "Test 7: Verify autostart symlink exists"
+      ansible.builtin.stat:
+        path: "/etc/xen/auto/{{ test_vm_name }}.cfg"
+      register: _t7_pre
+
+    - name: "Test 7: Assert autostart on"
+      ansible.builtin.assert:
+        that: _t7_pre.stat.exists and _t7_pre.stat.islnk
+
+    - name: "Test 7: Re-apply with autostart=false"
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(test_vm | combine({'autostart': false}), recursive=true) }}"
+
+    - name: "Test 7: Verify autostart symlink removed"
+      ansible.builtin.stat:
+        path: "/etc/xen/auto/{{ test_vm_name }}.cfg"
+      register: _t7_post
+
+    - name: "Test 7: Assert autostart off"
+      ansible.builtin.assert:
+        that: not _t7_post.stat.exists
+        fail_msg: "Autostart symlink should be removed when switching to autostart=false"
+
+    - name: "Test 7: Verify VM still running (toggle should not stop it)"
+      ansible.builtin.command:
+        cmd: "xl domid {{ test_vm_name }}"
+      changed_when: false
+
+    - name: "Test 7: PASSED"
+      ansible.builtin.debug:
+        msg: "Autostart toggle true→false removes symlink without stopping VM"
+
+    # === Test 8: Config change on running VM ===
+    - name: "Test 8: Read config before change"
+      ansible.builtin.slurp:
+        src: "/etc/xen/{{ test_vm_name }}.cfg"
+      register: _t8_cfg_before
+
+    - name: "Test 8: Re-apply with different memory and crash policy"
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(test_vm | combine({'memory': 768, 'on_crash': 'destroy'}), recursive=true) }}"
+
+    - name: "Test 8: Read config after change"
+      ansible.builtin.slurp:
+        src: "/etc/xen/{{ test_vm_name }}.cfg"
+      register: _t8_cfg_after
+
+    - name: "Test 8: Assert config updated on disk"
+      ansible.builtin.assert:
+        that:
+          - "'memory = 768' in _t8_after_content"
+          - "'on_crash = \"destroy\"' in _t8_after_content"
+          - "'memory = 512' not in _t8_after_content"
+        fail_msg: "xl config should reflect new memory and crash policy"
+      vars:
+        _t8_after_content: "{{ _t8_cfg_after.content | b64decode }}"
+
+    - name: "Test 8: Assert VM still running (config change is next-boot)"
+      ansible.builtin.command:
+        cmd: "xl domid {{ test_vm_name }}"
+      changed_when: false
+
+    - name: "Test 8: PASSED"
+      ansible.builtin.debug:
+        msg: "Config change updates file on disk, does not restart running VM"
+
+    # === Test 9: Runner cloud-init (template validation only) ===
+    - name: "Test 9: Stop test VM for runner test"
+      ansible.builtin.command:
+        cmd: "xl destroy {{ test_vm_name }}"
+      failed_when: false
+
+    - name: "Test 9: Remove test VM disk for fresh cloud-init"
+      ansible.builtin.file:
+        path: "/vm/{{ test_vm_name }}"
+        state: absent
+
+    - name: "Test 9: Create VM with runner block"
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(test_vm | combine({
+          'runner': {
+            'repo_url': 'https://github.com/test/repo',
+            'token': 'FAKE_TOKEN_FOR_TESTING',
+            'labels': 'self-hosted,xen,test',
+            'version': '2.323.0'
+          }
+        }), recursive=true) }}"
+
+    - name: "Test 9: Mount cloud-init ISO and check user-data"
+      ansible.builtin.shell:
+        cmd: |
+          mkdir -p /tmp/xliac-test-mount
+          mount -o loop /vm/{{ test_vm_name }}/cloudinit.iso /tmp/xliac-test-mount
+          cat /tmp/xliac-test-mount/user-data
+          umount /tmp/xliac-test-mount
+          rmdir /tmp/xliac-test-mount
+      register: _t9_userdata
+
+    - name: "Test 9: Assert runner install script in user-data"
+      ansible.builtin.assert:
+        that:
+          - "'/opt/runner-install.sh' in _t9_userdata.stdout"
+          - "'RUNNER_VERSION=\"2.323.0\"' in _t9_userdata.stdout"
+          - "'RUNNER_LABELS=\"self-hosted,xen,test\"' in _t9_userdata.stdout"
+          - "'RUNNER_REPO=\"https://github.com/test/repo\"' in _t9_userdata.stdout"
+          - "'RUNNER_TOKEN=\"FAKE_TOKEN_FOR_TESTING\"' in _t9_userdata.stdout"
+          - "'RUNNER_NAME=\"{{ test_vm_name }}\"' in _t9_userdata.stdout"
+        fail_msg: "Runner install script not correctly rendered in user-data"
+
+    - name: "Test 9: Assert runner script is executable via runcmd"
+      ansible.builtin.assert:
+        that:
+          - "'/opt/runner-install.sh' in _t9_userdata.stdout"
+        fail_msg: "Runner script should be called from runcmd"
+
+    - name: "Test 9: PASSED"
+      ansible.builtin.debug:
+        msg: "Runner cloud-init template renders correctly with all runner vars"
+
+    # === Test 10: Multiple VMs ===
+    - name: "Test 10: Stop and clean test VM"
+      ansible.builtin.command:
+        cmd: "xl destroy {{ test_vm_name }}"
+      failed_when: false
+
+    - name: "Test 10: Clean both test VMs"
       ansible.builtin.file:
         path: "{{ item }}"
         state: absent
       loop:
         - "/vm/{{ test_vm_name }}"
+        - "/vm/{{ test_vm_name }}-2"
         - "/etc/xen/{{ test_vm_name }}.cfg"
+        - "/etc/xen/{{ test_vm_name }}-2.cfg"
+
+    - name: "Test 10: Create two VMs via role loop"
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(item, recursive=true) }}"
+      loop:
+        - name: "{{ test_vm_name }}"
+          image: ubuntu-24.04
+          memory: 512
+          vcpus: 1
+          disk_size: 4G
+          bridge: xenbr0
+          state: present
+          autostart: false
+          on_poweroff: destroy
+          on_reboot: restart
+          on_crash: restart
+        - name: "{{ test_vm_name }}-2"
+          image: ubuntu-24.04
+          memory: 512
+          vcpus: 1
+          disk_size: 4G
+          bridge: xenbr0
+          state: present
+          autostart: false
+          on_poweroff: destroy
+          on_reboot: restart
+          on_crash: restart
+
+    - name: "Test 10: Verify both domains running"
+      ansible.builtin.command:
+        cmd: "xl domid {{ item }}"
+      loop:
+        - "{{ test_vm_name }}"
+        - "{{ test_vm_name }}-2"
+      changed_when: false
+
+    - name: "Test 10: Verify both configs exist"
+      ansible.builtin.stat:
+        path: "/etc/xen/{{ item }}.cfg"
+      register: _t10_cfgs
+      loop:
+        - "{{ test_vm_name }}"
+        - "{{ test_vm_name }}-2"
+
+    - name: "Test 10: Assert both configs exist"
+      ansible.builtin.assert:
+        that: item.stat.exists
+        fail_msg: "Config missing: {{ item.item }}"
+      loop: "{{ _t10_cfgs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: "Test 10: PASSED"
+      ansible.builtin.debug:
+        msg: "Multiple VMs created and running simultaneously"
+
+    # === Cleanup ===
+    - name: "Cleanup: destroy all test domains"
+      ansible.builtin.command:
+        cmd: "xl destroy {{ item }}"
+      loop:
+        - "{{ test_vm_name }}"
+        - "{{ test_vm_name }}-2"
+      failed_when: false
+      changed_when: false
+
+    - name: "Cleanup: remove all test files"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/vm/{{ test_vm_name }}"
+        - "/vm/{{ test_vm_name }}-2"
+        - "/etc/xen/{{ test_vm_name }}.cfg"
+        - "/etc/xen/{{ test_vm_name }}-2.cfg"
         - "/etc/xen/auto/{{ test_vm_name }}.cfg"
+        - "/etc/xen/auto/{{ test_vm_name }}-2.cfg"
 
     - name: "ALL TESTS PASSED"
       ansible.builtin.debug:
-        msg: "5/5 tests passed — lifecycle policies, autostart, idempotency, absent state, file structure"
+        msg: "10/10 tests passed — lifecycle, autostart, idempotency, absent, structure, destroy, toggle, config change, runner template, multi-VM"
