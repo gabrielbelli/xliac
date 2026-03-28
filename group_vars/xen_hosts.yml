@@ -1,0 +1,56 @@
+base_dir: /vm
+images_dir: /vm/bases
+
+# --- Base image registry ---
+# Define cloud images here. Each VM references an image by key name.
+# Compressed images are downloaded and decompressed on the hypervisor.
+images:
+  freebsd-15.0-zfs:
+    url: https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/amd64/Latest/FreeBSD-15.0-RELEASE-amd64-BASIC-CLOUDINIT-zfs.qcow2.xz
+    filename: FreeBSD-15.0-RELEASE-amd64-BASIC-CLOUDINIT-zfs.qcow2
+    format: qcow2
+    compress: xz
+  freebsd-15.0-ufs:
+    url: https://download.freebsd.org/releases/VM-IMAGES/15.0-RELEASE/amd64/Latest/FreeBSD-15.0-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2.xz
+    filename: FreeBSD-15.0-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2
+    format: qcow2
+    compress: xz
+
+# --- VM defaults (overridable per VM) ---
+vm_defaults:
+  memory: 1024
+  vcpus: 2
+  disk_size: 10G
+  bridge: xenbr0
+  state: present
+
+# --- SSH keys injected into every VM ---
+ssh_keys: []
+# ssh_keys:
+#   - "ssh-ed25519 AAAA... you@host"
+
+# --- Cloud-init base (applied to every VM, before per-VM extras) ---
+# FreeBSD-specific: enables serial console and sshd.
+# Adjust for other OSes as needed.
+cloudinit_base:
+  write_files:
+    - path: /boot/loader.conf.local
+      content: |
+        boot_multicons="YES"
+        boot_serial="YES"
+        comconsole_speed="115200"
+        console="comconsole,vidconsole"
+  runcmd:
+    - 'sysrc sshd_enable=YES'
+    - 'service sshd restart || true'
+
+# --- Default network config (DHCP on all interfaces) ---
+# Uses cloud-init network-config v2 format.
+# Override per VM for static IPs — see vms/freebsd.yml for examples.
+network_config_default:
+  version: 2
+  ethernets:
+    all:
+      match:
+        name: "*"
+      dhcp4: true

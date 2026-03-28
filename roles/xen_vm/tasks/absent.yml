@@ -1,0 +1,13 @@
+---
+# Stop domain only — disk cleanup is in destroy.yml
+- name: "{{ vm.name }} — check if domain is running"
+  ansible.builtin.command:
+    cmd: "xl domid {{ vm.name }}"
+  register: _xl_domid
+  failed_when: false
+  changed_when: false
+
+- name: "{{ vm.name }} — stop domain"
+  ansible.builtin.command:
+    cmd: "xl destroy {{ vm.name }}"
+  when: _xl_domid.rc == 0

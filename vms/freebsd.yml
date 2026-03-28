@@ -1,0 +1,35 @@
+name: freebsd
+image: freebsd-15.0-zfs
+
+# Everything else inherits from vm_defaults in group_vars/xen_hosts.yml.
+# Override any default here, e.g.:
+#
+#   memory: 2048
+#   vcpus: 4
+#   disk_size: 20G
+#   bridge: br0
+#
+# Per-VM cloud-init extras (appended to cloudinit_base):
+#
+#   cloudinit:
+#     user: myuser
+#     packages:
+#       - nginx
+#     runcmd:
+#       - 'pkg install -y nginx'
+#     write_files:
+#       - path: /etc/rc.local
+#         content: |
+#           echo "hello"
+#
+# Per-VM network (overrides network_config_default):
+#
+#   network:
+#     version: 2
+#     ethernets:
+#       xn0:
+#         addresses:
+#           - 10.0.0.50/24
+#         gateway4: 10.0.0.1
+#         nameservers:
+#           addresses: [1.1.1.1, 8.8.8.8]

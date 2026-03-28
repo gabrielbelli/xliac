@@ -1,0 +1,35 @@
+---
+- name: Destroy Xen VM and clean up disk
+  hosts: xen_hosts
+  become: true
+
+  vars_prompt:
+    - name: target_vm
+      prompt: "VM name to destroy and wipe"
+      private: false
+
+    - name: confirm
+      prompt: "This will DELETE all data for this VM. Type 'yes' to confirm"
+      private: false
+
+  tasks:
+    - name: Abort if not confirmed
+      ansible.builtin.fail:
+        msg: "Aborted."
+      when: confirm != "yes"
+
+    - name: Stop domain
+      ansible.builtin.command:
+        cmd: "xl destroy {{ target_vm }}"
+      failed_when: false
+      changed_when: true
+
+    - name: Remove Xen config
+      ansible.builtin.file:
+        path: "/etc/xen/{{ target_vm }}.cfg"
+        state: absent
+
+    - name: Remove VM directory (disk + cloud-init ISO)
+      ansible.builtin.file:
+        path: "{{ base_dir | default('/vm') }}/{{ target_vm }}"
+        state: absent

@@ -1,0 +1,8 @@
+---
+- name: "{{ vm.name }} — present"
+  ansible.builtin.include_tasks: present.yml
+  when: vm.state | default('present') == 'present'
+
+- name: "{{ vm.name }} — absent"
+  ansible.builtin.include_tasks: absent.yml
+  when: vm.state | default('present') == 'absent'

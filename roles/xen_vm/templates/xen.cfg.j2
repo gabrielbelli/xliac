@@ -1,0 +1,15 @@
+name = "{{ vm.name }}"
+type = "hvm"
+memory = {{ vm.memory }}
+vcpus = {{ vm.vcpus }}
+
+disk = [
+    '{{ _image.format }}:{{ _vm_disk }},hda,w',
+    'file:{{ _vm_iso }},hdc:cdrom,r'
+]
+
+vif = ['bridge={{ vm.bridge }}']
+
+boot = "c"
+serial = "pty"
+xen_platform_pci = {{ xen_platform_pci }}

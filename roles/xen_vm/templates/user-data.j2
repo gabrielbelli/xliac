@@ -1,0 +1,41 @@
+#cloud-config
+hostname: {{ vm.name }}
+fqdn: {{ vm.name }}.local
+
+users:
+  - name: {{ vm.cloudinit.user | default('admin') }}
+    ssh_authorized_keys:
+{% for key in vm.ssh_keys | default(ssh_keys) %}
+      - {{ key }}
+{% endfor %}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: {{ vm.cloudinit.shell | default('/bin/sh') }}
+{% if cloudinit_base.write_files is defined or (vm.cloudinit is defined and vm.cloudinit.write_files is defined) %}
+
+write_files:
+{% for f in cloudinit_base.write_files | default([]) %}
+  - path: {{ f.path }}
+    content: |
+{{ f.content | indent(6, true) }}
+{% endfor %}
+{% for f in (vm.cloudinit.write_files | default([])) %}
+  - path: {{ f.path }}
+    content: |
+{{ f.content | indent(6, true) }}
+{% endfor %}
+{% endif %}
+{% set all_runcmd = (cloudinit_base.runcmd | default([])) + (vm.cloudinit.runcmd | default([])) %}
+{% if all_runcmd %}
+
+runcmd:
+{% for cmd in all_runcmd %}
+  - '{{ cmd }}'
+{% endfor %}
+{% endif %}
+{% if vm.cloudinit is defined and vm.cloudinit.packages is defined %}
+
+packages:
+{% for pkg in vm.cloudinit.packages %}
+  - {{ pkg }}
+{% endfor %}
+{% endif %}

@@ -1,0 +1,121 @@
+---
+# --- Resolve image ---
+- name: "{{ vm.name }} — resolve image definition"
+  ansible.builtin.set_fact:
+    _image: "{{ images[vm.image] }}"
+
+- name: "{{ vm.name }} — set paths"
+  ansible.builtin.set_fact:
+    _vm_dir: "{{ base_dir }}/{{ vm.name }}"
+    _vm_disk: "{{ base_dir }}/{{ vm.name }}/disk.qcow2"
+    _vm_iso: "{{ base_dir }}/{{ vm.name }}/cloudinit.iso"
+    _vm_cfg: "/etc/xen/{{ vm.name }}.cfg"
+    _base_image: "{{ images_dir }}/{{ _image.filename }}"
+
+# --- Base image (download + decompress on server) ---
+- name: "{{ vm.name }} — check base image"
+  ansible.builtin.stat:
+    path: "{{ _base_image }}"
+  register: _base_stat
+
+- name: "{{ vm.name }} — download base image"
+  when: not _base_stat.stat.exists
+  block:
+    - name: "{{ vm.name }} — download compressed image"
+      ansible.builtin.get_url:
+        url: "{{ _image.url }}"
+        dest: "{{ _base_image }}.{{ _image.compress }}"
+        mode: "0644"
+      when: _image.compress is defined
+
+    - name: "{{ vm.name }} — decompress image"
+      ansible.builtin.command:
+        cmd: "unxz {{ _base_image }}.{{ _image.compress }}"
+      when: _image.compress is defined and _image.compress == 'xz'
+
+    - name: "{{ vm.name }} — download uncompressed image"
+      ansible.builtin.get_url:
+        url: "{{ _image.url }}"
+        dest: "{{ _base_image }}"
+        mode: "0644"
+      when: _image.compress is not defined
+
+# --- VM directory ---
+- name: "{{ vm.name }} — create VM directory"
+  ansible.builtin.file:
+    path: "{{ _vm_dir }}"
+    state: directory
+    mode: "0755"
+
+# --- VM disk (COW overlay) ---
+- name: "{{ vm.name }} — check VM disk"
+  ansible.builtin.stat:
+    path: "{{ _vm_disk }}"
+  register: _disk_stat
+
+- name: "{{ vm.name }} — create disk overlay"
+  ansible.builtin.command:
+    cmd: >-
+      qemu-img create -f qcow2
+      -b {{ _base_image }} -F {{ _image.format }}
+      {{ _vm_disk }} {{ vm.disk_size }}
+  when: not _disk_stat.stat.exists
+
+# --- Cloud-init ISO ---
+- name: "{{ vm.name }} — create cloud-init staging dir"
+  ansible.builtin.tempfile:
+    state: directory
+    prefix: "cloudinit-{{ vm.name }}-"
+  register: _ci_tmp
+
+- name: "{{ vm.name }} — render user-data"
+  ansible.builtin.template:
+    src: user-data.j2
+    dest: "{{ _ci_tmp.path }}/user-data"
+    mode: "0644"
+
+- name: "{{ vm.name }} — render meta-data"
+  ansible.builtin.template:
+    src: meta-data.j2
+    dest: "{{ _ci_tmp.path }}/meta-data"
+    mode: "0644"
+
+- name: "{{ vm.name }} — render network-config"
+  ansible.builtin.template:
+    src: network-config.j2
+    dest: "{{ _ci_tmp.path }}/network-config"
+    mode: "0644"
+
+- name: "{{ vm.name }} — generate cloud-init ISO"
+  ansible.builtin.command:
+    cmd: >-
+      genisoimage -output {{ _vm_iso }}
+      -volid cidata -joliet -rock
+      {{ _ci_tmp.path }}/user-data
+      {{ _ci_tmp.path }}/meta-data
+      {{ _ci_tmp.path }}/network-config
+
+- name: "{{ vm.name }} — clean up staging dir"
+  ansible.builtin.file:
+    path: "{{ _ci_tmp.path }}"
+    state: absent
+
+# --- Xen config ---
+- name: "{{ vm.name }} — render Xen config"
+  ansible.builtin.template:
+    src: xen.cfg.j2
+    dest: "{{ _vm_cfg }}"
+    mode: "0644"
+
+# --- Start domain ---
+- name: "{{ vm.name }} — check if domain is running"
+  ansible.builtin.command:
+    cmd: "xl domid {{ vm.name }}"
+  register: _xl_domid
+  failed_when: false
+  changed_when: false
+
+- name: "{{ vm.name }} — start domain"
+  ansible.builtin.command:
+    cmd: "xl create {{ _vm_cfg }}"
+  when: _xl_domid.rc != 0

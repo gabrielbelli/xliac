@@ -1,0 +1,4 @@
+---
+# These are fallbacks — vm_defaults in group_vars takes precedence,
+# then per-VM overrides in vms/*.yml override those.
+xen_platform_pci: 1

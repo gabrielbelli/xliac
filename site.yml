@@ -1,0 +1,31 @@
+---
+- name: Manage Xen VMs
+  hosts: xen_hosts
+  become: true
+
+  pre_tasks:
+    - name: Load VM definitions from vms/
+      ansible.builtin.set_fact:
+        vm_definitions: >-
+          {{
+            vm_definitions | default([]) +
+            [lookup('file', item) | from_yaml]
+          }}
+      loop: "{{ query('fileglob', playbook_dir + '/vms/*.yml') | sort }}"
+
+    - name: Ensure images directory exists
+      ansible.builtin.file:
+        path: "{{ images_dir }}"
+        state: directory
+        mode: "0755"
+
+  tasks:
+    - name: Apply xen_vm role per VM
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(vm_item, recursive=true) }}"
+      loop: "{{ vm_definitions }}"
+      loop_control:
+        loop_var: vm_item
+        label: "{{ vm_item.name }}"
