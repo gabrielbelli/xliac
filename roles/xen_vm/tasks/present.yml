@@ -107,6 +107,27 @@
     dest: "{{ _vm_cfg }}"
     mode: "0644"
 
+# --- Autostart ---
+- name: "{{ vm.name }} — ensure /etc/xen/auto exists"
+  ansible.builtin.file:
+    path: /etc/xen/auto
+    state: directory
+    mode: "0755"
+  when: vm.autostart | default(false)
+
+- name: "{{ vm.name }} — enable autostart"
+  ansible.builtin.file:
+    src: "{{ _vm_cfg }}"
+    dest: "/etc/xen/auto/{{ vm.name }}.cfg"
+    state: link
+  when: vm.autostart | default(false)
+
+- name: "{{ vm.name }} — disable autostart"
+  ansible.builtin.file:
+    path: "/etc/xen/auto/{{ vm.name }}.cfg"
+    state: absent
+  when: not (vm.autostart | default(false))
+
 # --- Start domain ---
 - name: "{{ vm.name }} — check if domain is running"
   ansible.builtin.command:

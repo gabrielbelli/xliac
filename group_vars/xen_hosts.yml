@@ -27,6 +27,10 @@ vm_defaults:
   disk_size: 10G
   bridge: xenbr0
   state: present
+  autostart: false
+  on_poweroff: destroy
+  on_reboot: restart
+  on_crash: restart
 
 # --- SSH keys injected into every VM ---
 ssh_keys: []

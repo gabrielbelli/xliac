@@ -8,6 +8,10 @@ image: freebsd-15.0-zfs
 #   vcpus: 4
 #   disk_size: 20G
 #   bridge: br0
+#   autostart: true
+#   on_poweroff: destroy    # destroy | restart | preserve
+#   on_reboot: restart
+#   on_crash: restart
 #
 # Per-VM cloud-init extras (appended to cloudinit_base):
 #

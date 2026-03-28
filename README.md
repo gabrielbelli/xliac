@@ -166,6 +166,28 @@ runner:
 
 Runner definitions are gitignored (they contain tokens). Supports both Linux (Ubuntu) and FreeBSD guests.
 
+## Lifecycle policies
+
+Control what happens when a VM shuts down, reboots, or crashes:
+
+```yaml
+name: myvm
+image: freebsd-15.0-zfs
+autostart: true       # start on Dom0 boot via xendomains
+on_poweroff: destroy  # destroy | restart | preserve
+on_reboot: restart
+on_crash: restart
+```
+
+| Setting | `destroy` | `restart` | `preserve` |
+|---|---|---|---|
+| **Behaviour** | Remove domain | Restart VM | Keep domain stopped |
+| **Use case** | Ephemeral / `--rm` style | Persistent services | Debug crashed VMs |
+
+Defaults: `on_poweroff: destroy`, `on_reboot: restart`, `on_crash: restart`.
+
+**Autostart** creates a symlink in `/etc/xen/auto/` so `xendomains` starts the VM on Dom0 boot. Setting `state: absent` or running `destroy.yml` removes the symlink.
+
 ## Notes
 
 - **HVM only** — VMs boot via SeaBIOS with `xen_platform_pci=1` for PV driver passthrough

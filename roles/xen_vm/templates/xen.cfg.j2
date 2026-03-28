@@ -13,3 +13,7 @@ vif = ['bridge={{ vm.bridge }}']
 boot = "c"
 serial = "pty"
 xen_platform_pci = {{ xen_platform_pci }}
+
+on_poweroff = "{{ vm.on_poweroff }}"
+on_reboot = "{{ vm.on_reboot }}"
+on_crash = "{{ vm.on_crash }}"

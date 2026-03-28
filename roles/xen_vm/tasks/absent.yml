@@ -11,3 +11,8 @@
   ansible.builtin.command:
     cmd: "xl destroy {{ vm.name }}"
   when: _xl_domid.rc == 0
+
+- name: "{{ vm.name }} — disable autostart"
+  ansible.builtin.file:
+    path: "/etc/xen/auto/{{ vm.name }}.cfg"
+    state: absent
