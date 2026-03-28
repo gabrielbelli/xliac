@@ -41,11 +41,14 @@ ansible-playbook -i inventory.local.ini site.yml
 .
 ├── inventory.ini               # Inventory (edit or copy to .local.ini)
 ├── site.yml                    # Main playbook — reads vms/*.yml
+├── runners.yml                 # GitHub runner playbook — reads runners/*.yml
 ├── destroy.yml                 # Interactive VM destruction + disk wipe
 ├── group_vars/
 │   └── xen_hosts.yml           # Image registry, defaults, SSH keys
 ├── vms/                        # One YAML per VM
 │   └── freebsd.yml
+├── runners/                    # One YAML per GitHub runner (gitignored, contains tokens)
+│   └── example.yml.dist
 └── roles/xen_vm/
     ├── defaults/main.yml
     ├── tasks/
@@ -56,7 +59,8 @@ ansible-playbook -i inventory.local.ini site.yml
         ├── xen.cfg.j2          # Xen domain config
         ├── user-data.j2        # Cloud-init user-data
         ├── meta-data.j2        # Cloud-init meta-data
-        └── network-config.j2   # Cloud-init network-config (v2)
+        ├── network-config.j2   # Cloud-init network-config (v2)
+        └── runner-install.sh.j2 # GitHub runner install script
 ```
 
 ## Adding a VM
@@ -136,6 +140,31 @@ cloudinit:
 ```
 
 For a fully custom cloud-init, provide your own `cloudinit_template` path (not yet implemented — PRs welcome).
+
+## GitHub Actions runners
+
+Deploy self-hosted GitHub runners as VMs. The runner installs and registers automatically on first boot via cloud-init — no second SSH pass needed.
+
+1. Copy the example: `cp runners/example.yml.dist runners/my-runner.yml`
+2. Edit with your repo URL and [registration token](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners)
+3. Deploy: `ansible-playbook -i inventory.local.ini runners.yml`
+
+```yaml
+# runners/my-runner.yml
+name: my-runner
+image: ubuntu-24.04
+memory: 4096
+vcpus: 4
+disk_size: 32G
+bridge: xenbr0
+
+runner:
+  repo_url: https://github.com/org/repo
+  token: AXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+  labels: self-hosted,xen,linux
+```
+
+Runner definitions are gitignored (they contain tokens). Supports both Linux (Ubuntu) and FreeBSD guests.
 
 ## Notes
 
