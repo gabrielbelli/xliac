@@ -1,0 +1,31 @@
+---
+- name: Deploy GitHub runner VMs
+  hosts: xen_hosts
+  become: true
+
+  pre_tasks:
+    - name: Load runner definitions from runners/
+      ansible.builtin.set_fact:
+        runner_definitions: >-
+          {{
+            runner_definitions | default([]) +
+            [lookup('file', item) | from_yaml]
+          }}
+      loop: "{{ query('fileglob', playbook_dir + '/runners/*.yml') | sort }}"
+
+    - name: Ensure images directory exists
+      ansible.builtin.file:
+        path: "{{ images_dir }}"
+        state: directory
+        mode: "0755"
+
+  tasks:
+    - name: Apply xen_vm role per runner
+      ansible.builtin.include_role:
+        name: xen_vm
+      vars:
+        vm: "{{ vm_defaults | combine(runner_item, recursive=true) }}"
+      loop: "{{ runner_definitions }}"
+      loop_control:
+        loop_var: runner_item
+        label: "{{ runner_item.name }}"

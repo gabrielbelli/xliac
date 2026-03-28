@@ -1,0 +1,14 @@
+name: ci-runner-01
+image: ubuntu-24.04
+memory: 4096
+vcpus: 4
+disk_size: 32G
+bridge: xenbr1
+
+runner:
+  repo_url: https://github.com/org/repo
+  token: AXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+  labels: self-hosted,xen,linux
+  version: "2.323.0"
+  # user: runner            # system user to run the service (default: runner)
+  # group: default          # optional runner group

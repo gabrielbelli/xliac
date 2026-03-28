@@ -1,0 +1,84 @@
+#!/bin/sh
+# GitHub Actions runner install — runs via cloud-init runcmd on first boot
+set -e
+
+RUNNER_VERSION="{{ vm.runner.version | default('2.323.0') }}"
+RUNNER_USER="{{ vm.runner.user | default('runner') }}"
+RUNNER_DIR="/opt/actions-runner"
+RUNNER_LABELS="{{ vm.runner.labels | default('self-hosted,xen') }}"
+RUNNER_NAME="{{ vm.name }}"
+RUNNER_REPO="{{ vm.runner.repo_url }}"
+RUNNER_TOKEN="{{ vm.runner.token }}"
+RUNNER_GROUP="{{ vm.runner.group | default('') }}"
+OS=$(uname -s)
+
+# --- Install dependencies ---
+if [ "$OS" = "Linux" ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -q
+    apt-get install -yq curl tar jq libicu-dev
+    ARCH="linux-x64"
+    SHELL_BIN="/bin/bash"
+elif [ "$OS" = "FreeBSD" ]; then
+    pkg install -y curl bash icu jq
+    ARCH="linux-x64"
+    SHELL_BIN="/usr/local/bin/bash"
+fi
+
+# --- Create runner user and directory ---
+if [ "$OS" = "FreeBSD" ]; then
+    pw useradd -n "$RUNNER_USER" -d "$RUNNER_DIR" -s /usr/sbin/nologin -w no 2>/dev/null || true
+else
+    useradd --system --home-dir "$RUNNER_DIR" --shell /usr/sbin/nologin "$RUNNER_USER" 2>/dev/null || true
+fi
+mkdir -p "$RUNNER_DIR"
+
+# --- Download and extract ---
+ARCHIVE="actions-runner-${ARCH}-${RUNNER_VERSION}.tar.gz"
+curl -sL -o "/tmp/${ARCHIVE}" \
+    "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/${ARCHIVE}"
+tar xzf "/tmp/${ARCHIVE}" -C "$RUNNER_DIR"
+chown -R "$RUNNER_USER" "$RUNNER_DIR"
+rm -f "/tmp/${ARCHIVE}"
+
+# --- Configure ---
+GROUP_ARG=""
+[ -n "$RUNNER_GROUP" ] && GROUP_ARG="--runnergroup $RUNNER_GROUP"
+
+cd "$RUNNER_DIR"
+sudo -u "$RUNNER_USER" $SHELL_BIN -c "./config.sh \
+    --url $RUNNER_REPO \
+    --token $RUNNER_TOKEN \
+    --name $RUNNER_NAME \
+    --labels $RUNNER_LABELS \
+    --work _work \
+    --unattended --replace \
+    $GROUP_ARG"
+
+# --- Install service ---
+if [ "$OS" = "Linux" ]; then
+    ./svc.sh install "$RUNNER_USER"
+    ./svc.sh start
+elif [ "$OS" = "FreeBSD" ]; then
+    cat > /usr/local/etc/rc.d/actions_runner <<'RCEOF'
+#!/bin/sh
+# PROVIDE: actions_runner
+# REQUIRE: DAEMON NETWORKING
+# KEYWORD: shutdown
+. /etc/rc.subr
+name="actions_runner"
+rcvar="${name}_enable"
+pidfile="/var/run/${name}.pid"
+logfile="/var/log/${name}.log"
+command="/usr/sbin/daemon"
+command_args="-p ${pidfile} -o ${logfile} -u RUNNER_USER_PLACEHOLDER SHELL_BIN_PLACEHOLDER RUNNER_DIR_PLACEHOLDER/run.sh"
+load_rc_config $name
+run_rc_command "$1"
+RCEOF
+    sed -i '' "s|RUNNER_USER_PLACEHOLDER|${RUNNER_USER}|g" /usr/local/etc/rc.d/actions_runner
+    sed -i '' "s|SHELL_BIN_PLACEHOLDER|${SHELL_BIN}|g" /usr/local/etc/rc.d/actions_runner
+    sed -i '' "s|RUNNER_DIR_PLACEHOLDER|${RUNNER_DIR}|g" /usr/local/etc/rc.d/actions_runner
+    chmod 755 /usr/local/etc/rc.d/actions_runner
+    sysrc actions_runner_enable=YES
+    service actions_runner start
+fi

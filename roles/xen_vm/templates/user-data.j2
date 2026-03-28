@@ -10,27 +10,37 @@ users:
 {% endfor %}
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: {{ vm.cloudinit.shell | default('/bin/sh') }}
-{% if cloudinit_base.write_files is defined or (vm.cloudinit is defined and vm.cloudinit.write_files is defined) %}
+{% if vm.cloudinit_password is defined %}
+    lock_passwd: false
+    passwd: {{ vm.cloudinit_password }}
+    plain_text_passwd: {{ vm.cloudinit_password }}
+{% endif %}
+{% set all_write_files = (cloudinit_base.write_files | default([])) + (vm.cloudinit.write_files | default([])) %}
+{% if all_write_files or vm.runner is defined %}
 
 write_files:
-{% for f in cloudinit_base.write_files | default([]) %}
+{% for f in all_write_files %}
   - path: {{ f.path }}
     content: |
 {{ f.content | indent(6, true) }}
 {% endfor %}
-{% for f in (vm.cloudinit.write_files | default([])) %}
-  - path: {{ f.path }}
+{% if vm.runner is defined %}
+  - path: /opt/runner-install.sh
+    permissions: '0755'
     content: |
-{{ f.content | indent(6, true) }}
-{% endfor %}
+{{ lookup('template', 'runner-install.sh.j2') | indent(6, true) }}
+{% endif %}
 {% endif %}
 {% set all_runcmd = (cloudinit_base.runcmd | default([])) + (vm.cloudinit.runcmd | default([])) %}
-{% if all_runcmd %}
+{% if all_runcmd or vm.runner is defined %}
 
 runcmd:
 {% for cmd in all_runcmd %}
   - '{{ cmd }}'
 {% endfor %}
+{% if vm.runner is defined %}
+  - '/opt/runner-install.sh'
+{% endif %}
 {% endif %}
 {% if vm.cloudinit is defined and vm.cloudinit.packages is defined %}
 

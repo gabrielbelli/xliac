@@ -1,0 +1,10 @@
+name: ansible-runner
+image: freebsd-15.0-zfs
+memory: 4096
+vcpus: 4
+disk_size: 32G
+bridge: xenbr1
+cloudinit:
+  user: ansible
+ssh_keys:
+  - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMUFsJs1gCmpM3gzFGOTbD97DugnVt+VruCeMVMN+2bP ansible-github-runner"

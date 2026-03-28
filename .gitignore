@@ -1,3 +1,6 @@
 .venv/
 .claude/
 *.retry
+inventory.local.ini
+runners/*.yml
+!runners/example.yml.dist

@@ -15,6 +15,10 @@ images:
     filename: FreeBSD-15.0-RELEASE-amd64-BASIC-CLOUDINIT-ufs.qcow2
     format: qcow2
     compress: xz
+  ubuntu-24.04:
+    url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+    filename: noble-server-cloudimg-amd64.img
+    format: qcow2
 
 # --- VM defaults (overridable per VM) ---
 vm_defaults:
@@ -41,8 +45,8 @@ cloudinit_base:
         comconsole_speed="115200"
         console="comconsole,vidconsole"
   runcmd:
-    - 'sysrc sshd_enable=YES'
-    - 'service sshd restart || true'
+    - 'which sysrc && sysrc sshd_enable=YES || true'
+    - 'service sshd restart || service ssh restart || true'
 
 # --- Default network config (DHCP on all interfaces) ---
 # Uses cloud-init network-config v2 format.
