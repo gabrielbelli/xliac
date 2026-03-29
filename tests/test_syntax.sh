@@ -15,6 +15,9 @@ ansible-playbook destroy.yml --syntax-check
 echo "=== Ansible syntax check: tests/test_lifecycle.yml ==="
 ansible-playbook tests/test_lifecycle.yml --syntax-check
 
+echo "=== Ansible-lint ==="
+ansible-lint
+
 echo "=== YAML lint: group_vars ==="
 python3 -c "import yaml; yaml.safe_load(open('group_vars/xen_hosts.yml'))" && echo "OK"
 

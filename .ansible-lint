@@ -1,0 +1,16 @@
+---
+# xliac uses xl, qemu-img, genisoimage, and unxz — none have Ansible modules.
+
+skip_list:
+  - command-instead-of-module
+  - risky-shell-pipe
+  - name[template]          # "{{ vm.name }} — action" is intentional for readable output
+  - var-naming[no-role-prefix]  # role uses short internal vars (_image, _vm_dir, etc.)
+
+warn_list:
+  - experimental
+
+exclude_paths:
+  - .git/
+  - .auto-claude/
+  - .venv/

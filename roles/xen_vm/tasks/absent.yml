@@ -11,6 +11,7 @@
   ansible.builtin.command:
     cmd: "xl destroy {{ vm.name }}"
   when: _xl_domid.rc == 0
+  changed_when: true
 
 - name: "{{ vm.name }} — disable autostart"
   ansible.builtin.file:

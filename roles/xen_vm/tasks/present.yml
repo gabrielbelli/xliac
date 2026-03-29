@@ -32,6 +32,7 @@
       ansible.builtin.command:
         cmd: "unxz {{ _base_image }}.{{ _image.compress }}"
       when: _image.compress is defined and _image.compress == 'xz'
+      changed_when: true
 
     - name: "{{ vm.name }} — download uncompressed image"
       ansible.builtin.get_url:
@@ -60,6 +61,7 @@
       -b {{ _base_image }} -F {{ _image.format }}
       {{ _vm_disk }} {{ vm.disk_size }}
   when: not _disk_stat.stat.exists
+  changed_when: true
 
 # --- Cloud-init ISO ---
 - name: "{{ vm.name }} — create cloud-init staging dir"
@@ -94,6 +96,7 @@
       {{ _ci_tmp.path }}/user-data
       {{ _ci_tmp.path }}/meta-data
       {{ _ci_tmp.path }}/network-config
+  changed_when: true
 
 - name: "{{ vm.name }} — clean up staging dir"
   ansible.builtin.file:
@@ -140,3 +143,4 @@
   ansible.builtin.command:
     cmd: "xl create {{ _vm_cfg }}"
   when: _xl_domid.rc != 0
+  changed_when: true

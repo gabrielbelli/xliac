@@ -22,7 +22,7 @@ The libvirt Xen (libxl) driver is a second-class citizen compared to KVM/QEMU â€
 ```bash
 # 1. Set up a virtualenv
 python3 -m venv .venv && source .venv/bin/activate
-pip install ansible
+pip install ansible ansible-lint
 
 # 2. Configure your host
 cp inventory.ini inventory.local.ini
@@ -187,6 +187,32 @@ on_crash: restart
 Defaults: `on_poweroff: destroy`, `on_reboot: restart`, `on_crash: restart`.
 
 **Autostart** creates a symlink in `/etc/xen/auto/` so `xendomains` starts the VM on Dom0 boot. Setting `state: absent` or running `destroy.yml` removes the symlink.
+
+## Development
+
+### Linting
+
+This project uses `ansible-lint` to enforce best practices. Install it in your virtualenv:
+
+```bash
+source .venv/bin/activate
+pip install ansible-lint
+```
+
+Run linting manually:
+
+```bash
+ansible-lint                     # lint all playbooks and roles
+ansible-lint site.yml            # lint a specific playbook
+```
+
+Or use the test suite (includes syntax + lint checks):
+
+```bash
+./tests/test_syntax.sh
+```
+
+**Configuration:** `.ansible-lint` skips `command-instead-of-module` for `xl`, `qemu-img`, `genisoimage`, and `unxz` commands â€” these Xen-specific tools have no Ansible module alternatives.
 
 ## Notes
 

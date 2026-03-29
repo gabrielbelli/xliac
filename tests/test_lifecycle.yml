@@ -244,6 +244,7 @@
       ansible.builtin.command:
         cmd: "xl destroy {{ test_vm_name }}"
       failed_when: false
+      changed_when: true
 
     - name: "Test 6: Nuke — remove autostart symlink"
       ansible.builtin.file:
@@ -377,6 +378,7 @@
       ansible.builtin.command:
         cmd: "xl destroy {{ test_vm_name }}"
       failed_when: false
+      changed_when: true
 
     - name: "Test 9: Remove test VM disk for fresh cloud-init"
       ansible.builtin.file:
@@ -387,14 +389,14 @@
       ansible.builtin.include_role:
         name: xen_vm
       vars:
-        vm: "{{ vm_defaults | combine(test_vm | combine({
-          'runner': {
-            'repo_url': 'https://github.com/test/repo',
-            'token': 'FAKE_TOKEN_FOR_TESTING',
-            'labels': 'self-hosted,xen,test',
-            'version': '2.323.0'
-          }
-        }), recursive=true) }}"
+        _test_runner:
+          repo_url: "https://github.com/test/repo"
+          token: "FAKE_TOKEN_FOR_TESTING"
+          labels: "self-hosted,xen,test"
+          version: "2.323.0"
+        vm: >-
+          {{ vm_defaults | combine(test_vm | combine({'runner': _test_runner}),
+          recursive=true) }}
 
     - name: "Test 9: Mount cloud-init ISO and check user-data"
       ansible.builtin.shell:
@@ -405,6 +407,7 @@
           umount /tmp/xliac-test-mount
           rmdir /tmp/xliac-test-mount
       register: _t9_userdata
+      changed_when: false
 
     - name: "Test 9: Assert runner install script in user-data"
       ansible.builtin.assert:
@@ -414,7 +417,7 @@
           - "'RUNNER_LABELS=\"self-hosted,xen,test\"' in _t9_userdata.stdout"
           - "'RUNNER_REPO=\"https://github.com/test/repo\"' in _t9_userdata.stdout"
           - "'RUNNER_TOKEN=\"FAKE_TOKEN_FOR_TESTING\"' in _t9_userdata.stdout"
-          - "'RUNNER_NAME=\"{{ test_vm_name }}\"' in _t9_userdata.stdout"
+          - "'RUNNER_NAME=\"' ~ test_vm_name ~ '\"' in _t9_userdata.stdout"
         fail_msg: "Runner install script not correctly rendered in user-data"
 
     - name: "Test 9: Assert runner script is executable via runcmd"
@@ -432,6 +435,7 @@
       ansible.builtin.command:
         cmd: "xl destroy {{ test_vm_name }}"
       failed_when: false
+      changed_when: true
 
     - name: "Test 10: Clean both test VMs"
       ansible.builtin.file:
